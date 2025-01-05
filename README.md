@@ -14,6 +14,8 @@
 ##### A low cost, DIY friendly Engine Management System (ECU) based on the Arduino framework
 </div>
 
+## Note
+Experimental project based from Speeduino project: test for an implementation using NumMakerUNO arduino bsp from Nuvoton
 
 ## Speeduino
 The Speeduino project is a flexible, fully featured Engine Management Systems (EMS aka ECU) based on the low cost and open source Arduino platform. It provides the hardware, firmware and software components that make up an engine management system, all provided under open licenses. With over 1000 installations, Speeduino has matured into a product that meets the needs of the hobbyist and enthusiast community without driving prices to the levels of traditional aftermarket ECUs.
