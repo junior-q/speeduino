@@ -5,56 +5,6 @@
 
 const char TSfirmwareVersion[] PROGMEM = "Speeduino";
 
-const byte data_structure_version = 2; //This identifies the data structure when reading / writing. (outdated ?)
-
-struct table3d16RpmLoad fuelTable; ///< 16x16 fuel map
-struct table3d16RpmLoad fuelTable2; ///< 16x16 fuel map
-struct table3d16RpmLoad ignitionTable; ///< 16x16 ignition map
-struct table3d16RpmLoad ignitionTable2; ///< 16x16 ignition map
-struct table3d16RpmLoad afrTable; ///< 16x16 afr target map
-struct table3d8RpmLoad stagingTable; ///< 8x8 fuel staging table
-struct table3d8RpmLoad boostTable; ///< 8x8 boost map
-struct table3d8RpmLoad boostTableLookupDuty; ///< 8x8 boost map lookup table
-struct table3d8RpmLoad vvtTable; ///< 8x8 vvt map
-struct table3d8RpmLoad vvt2Table; ///< 8x8 vvt2 map
-struct table3d8RpmLoad wmiTable; ///< 8x8 wmi map
-trimTable3d trim1Table; ///< 6x6 Fuel trim 1 map
-trimTable3d trim2Table; ///< 6x6 Fuel trim 2 map
-trimTable3d trim3Table; ///< 6x6 Fuel trim 3 map
-trimTable3d trim4Table; ///< 6x6 Fuel trim 4 map
-trimTable3d trim5Table; ///< 6x6 Fuel trim 5 map
-trimTable3d trim6Table; ///< 6x6 Fuel trim 6 map
-trimTable3d trim7Table; ///< 6x6 Fuel trim 7 map
-trimTable3d trim8Table; ///< 6x6 Fuel trim 8 map
-struct table3d4RpmLoad dwellTable; ///< 4x4 Dwell map
-struct table2D taeTable; ///< 4 bin TPS Acceleration Enrichment map (2D)
-struct table2D maeTable;
-struct table2D WUETable; ///< 10 bin Warm Up Enrichment map (2D)
-struct table2D ASETable; ///< 4 bin After Start Enrichment map (2D)
-struct table2D ASECountTable; ///< 4 bin After Start duration map (2D)
-struct table2D PrimingPulseTable; ///< 4 bin Priming pulsewidth map (2D)
-struct table2D crankingEnrichTable; ///< 4 bin cranking Enrichment map (2D)
-struct table2D dwellVCorrectionTable; ///< 6 bin dwell voltage correction (2D)
-struct table2D injectorVCorrectionTable; ///< 6 bin injector voltage correction (2D)
-struct table2D injectorAngleTable; ///< 4 bin injector angle curve (2D)
-struct table2D IATDensityCorrectionTable; ///< 9 bin inlet air temperature density correction (2D)
-struct table2D baroFuelTable; ///< 8 bin baro correction curve (2D)
-struct table2D IATRetardTable; ///< 6 bin ignition adjustment based on inlet air temperature  (2D)
-struct table2D idleTargetTable; ///< 10 bin idle target table for idle timing (2D)
-struct table2D idleAdvanceTable; ///< 6 bin idle advance adjustment table based on RPM difference  (2D)
-struct table2D CLTAdvanceTable; ///< 6 bin ignition adjustment based on coolant temperature  (2D)
-struct table2D rotarySplitTable; ///< 8 bin ignition split curve for rotary leading/trailing  (2D)
-struct table2D flexFuelTable;  ///< 6 bin flex fuel correction table for fuel adjustments (2D)
-struct table2D flexAdvTable;   ///< 6 bin flex fuel correction table for timing advance (2D)
-struct table2D flexBoostTable; ///< 6 bin flex fuel correction table for boost adjustments (2D)
-struct table2D fuelTempTable;  ///< 6 bin flex fuel correction table for fuel adjustments (2D)
-struct table2D knockWindowStartTable;
-struct table2D knockWindowDurationTable;
-struct table2D oilPressureProtectTable;
-struct table2D wmiAdvTable; //6 bin wmi correction table for timing advance (2D)
-struct table2D coolantProtectTable;
-struct table2D fanPWMTable;
-struct table2D rollingCutTable;
 
 /// volatile inj*_pin_port and  inj*_pin_mask vars are for the direct port manipulation of the injectors, coils and aux outputs.
 volatile PORT_TYPE *inj1_pin_port;
@@ -119,7 +69,6 @@ bool previousClutchTrigger;
 volatile uint32_t toothHistory[TOOTH_LOG_SIZE]; ///< Tooth trigger history - delta time (in uS) from last tooth (Indexed by @ref toothHistoryIndex)
 volatile uint8_t compositeLogHistory[TOOTH_LOG_SIZE]; 
 volatile unsigned int toothHistoryIndex = 0; ///< Current index to @ref toothHistory array
-unsigned long currentLoopTime; /**< The time (in uS) that the current mainloop started */
 volatile uint16_t ignitionCount; /**< The count of ignition events that have taken place since the engine started */
 #if defined(CORE_SAMD21)
   PinStatus primaryTriggerEdge;
@@ -145,7 +94,6 @@ byte maxInjOutputs = 1; /**< Number of injection outputs being used by the curre
 byte resetControl = RESET_CONTROL_DISABLED;
 
 volatile byte TIMER_mask;
-volatile byte LOOP_TIMER;
 
 /// Various pin numbering (Injectors, Ign outputs, CAS, Cam, Sensors. etc.) assignments
 byte pinInjector1; ///< Output pin injector 1
@@ -234,96 +182,3 @@ byte pinAirConFan;    // Stand-alone air conditioning fan output (See: auxiliari
 byte pinAirConRequest;  // Air conditioning request input (See: auxiliaries.ino)
 
 struct statuses currentStatus; /**< The master global "live" status struct. Contains all values that are updated frequently and used across modules */
-struct config2 configPage2;
-struct config4 configPage4;
-struct config6 configPage6;
-struct config9 configPage9;
-struct config10 configPage10;
-struct config13 configPage13;
-struct config15 configPage15;
-
-//byte cltCalibrationTable[CALIBRATION_TABLE_SIZE]; /**< An array containing the coolant sensor calibration values */
-//byte iatCalibrationTable[CALIBRATION_TABLE_SIZE]; /**< An array containing the inlet air temperature sensor calibration values */
-//byte o2CalibrationTable[CALIBRATION_TABLE_SIZE]; /**< An array containing the O2 sensor calibration values */
-
-uint16_t cltCalibration_bins[32];
-uint16_t cltCalibration_values[32];
-struct table2D cltCalibrationTable;
-uint16_t iatCalibration_bins[32];
-uint16_t iatCalibration_values[32];
-struct table2D iatCalibrationTable;
-uint16_t o2Calibration_bins[32];
-uint8_t o2Calibration_values[32];
-struct table2D o2CalibrationTable; 
-
-//These function do checks on a pin to determine if it is already in use by another (higher importance) active function
-bool pinIsOutput(byte pin)
-{
-  bool used = false;
-  bool isIdlePWM = (configPage6.iacAlgorithm > 0) && ((configPage6.iacAlgorithm <= 3) || (configPage6.iacAlgorithm == 6));
-  bool isIdleSteper = (configPage6.iacAlgorithm > 3) && (configPage6.iacAlgorithm != 6);
-  //Injector?
-  if ((pin == pinInjector1)
-  || ((pin == pinInjector2) && (configPage2.nInjectors > 1))
-  || ((pin == pinInjector3) && (configPage2.nInjectors > 2))
-  || ((pin == pinInjector4) && (configPage2.nInjectors > 3))
-  || ((pin == pinInjector5) && (configPage2.nInjectors > 4))
-  || ((pin == pinInjector6) && (configPage2.nInjectors > 5))
-  || ((pin == pinInjector7) && (configPage2.nInjectors > 6))
-  || ((pin == pinInjector8) && (configPage2.nInjectors > 7)))
-  {
-    used = true;
-  }
-  //Ignition?
-  if ((pin == pinCoil1)
-  || ((pin == pinCoil2) && (maxIgnOutputs > 1))
-  || ((pin == pinCoil3) && (maxIgnOutputs > 2))
-  || ((pin == pinCoil4) && (maxIgnOutputs > 3))
-  || ((pin == pinCoil5) && (maxIgnOutputs > 4))
-  || ((pin == pinCoil6) && (maxIgnOutputs > 5))
-  || ((pin == pinCoil7) && (maxIgnOutputs > 6))
-  || ((pin == pinCoil8) && (maxIgnOutputs > 7)))
-  {
-    used = true;
-  }
-  //Functions?
-  if ((pin == pinFuelPump)
-  || ((pin == pinFan) && (configPage2.fanEnable == 1))
-  || ((pin == pinVVT_1) && (configPage6.vvtEnabled > 0))
-  || ((pin == pinVVT_2) && (configPage10.wmiEnabled > 0))
-  || ((pin == pinVVT_2) && (configPage10.vvt2Enabled > 0))
-  || ((pin == pinBoost) && (configPage6.boostEnabled == 1))
-  || ((pin == pinIdle1) && isIdlePWM)
-  || ((pin == pinIdle2) && isIdlePWM && (configPage6.iacChannels == 1))
-  || ((pin == pinStepperEnable) && isIdleSteper)
-  || ((pin == pinStepperStep) && isIdleSteper)
-  || ((pin == pinStepperDir) && isIdleSteper)
-  || (pin == pinTachOut)
-  || ((pin == pinAirConComp) && (configPage15.airConEnable > 0))
-  || ((pin == pinAirConFan) && (configPage15.airConEnable > 0) && (configPage15.airConFanEnabled > 0)) )
-  {
-    used = true;
-  }
-  //Forbidden or hardware reserved? (Defined at board_xyz.h file)
-  if ( pinIsReserved(pin) ) { used = true; }
-
-  return used;
-}
-
-bool pinIsUsed(byte pin)
-{
-  bool used = false;
-
-  //Analog input?
-  if ( pinIsSensor(pin) )
-  {
-    used = true;
-  }
-  //Functions?
-  if ( pinIsOutput(pin) )
-  {
-    used = true;
-  }
-
-  return used;
-}
