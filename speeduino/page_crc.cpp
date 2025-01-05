@@ -1,7 +1,7 @@
 #include "globals.h"
 #include "page_crc.h"
 #include "pages.h"
-#include "table3d_axis_io.h"
+#include "tables/table3d_axis_io.h"
 
 using pCrcCalc = uint32_t (FastCRC32::*)(const uint8_t *, const uint16_t, bool);
 

@@ -7,9 +7,11 @@ A full copy of the license may be found in the projects root directory
  * Read sensors with appropriate timing / scheduling.
  */
 #include <SimplyAtomic.h>
+#include "speeduino.h"
 #include "sensors.h"
 #include "crankMaths.h"
 #include "globals.h"
+#include "config.h"
 #include "maths.h"
 #include "storage.h"
 #include "comms.h"

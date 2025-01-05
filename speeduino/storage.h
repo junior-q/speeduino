@@ -1,6 +1,8 @@
 #ifndef STORAGE_H
 #define STORAGE_H
 
+#include "tables/table3d_axis_io.h"
+
 /** @file storage.h
  * @brief Functions for reading and writing user settings to/from EEPROM
  *
@@ -120,29 +122,28 @@
  *
  */
 
-void writeAllConfig(void);
-void writeConfig(uint8_t pageNum);
-void EEPROMWriteRaw(uint16_t address, uint8_t data);
-uint8_t EEPROMReadRaw(uint16_t address);
-void loadConfig(void);
-void loadCalibration(void);
-void writeCalibration(void);
-void writeCalibrationPage(uint8_t pageNum);
-void resetConfigPages(void);
 
-//These are utility functions that prevent other files from having to use EEPROM.h directly
-byte readLastBaro(void);
-void storeLastBaro(byte newValue);
-uint8_t readEEPROMVersion(void);
-void storeEEPROMVersion(byte newVersion);
-void storePageCRC32(uint8_t pageNum, uint32_t crcValue);
-uint32_t readPageCRC32(uint8_t pageNum);
-void storeCalibrationCRC32(uint8_t calibrationPageNum, uint32_t calibrationCRC);
-uint32_t readCalibrationCRC32(uint8_t calibrationPageNum);
-uint16_t getEEPROMSize(void);
-bool isEepromWritePending(void);
 
 extern uint32_t deferEEPROMWritesUntil;
+
+
+#define EEPROM_DATA_VERSION   0
+
+
+
+// Calibration data is stored at the end of the EEPROM (This is in case any further calibration tables are needed as they are large blocks)
+#define STORAGE_END 0xFFF       // Should be E2END?
+#define EEPROM_CALIBRATION_CLT_VALUES (STORAGE_END-sizeof(cltCalibration_values))
+#define EEPROM_CALIBRATION_CLT_BINS   (EEPROM_CALIBRATION_CLT_VALUES-sizeof(cltCalibration_bins))
+#define EEPROM_CALIBRATION_IAT_VALUES (EEPROM_CALIBRATION_CLT_BINS-sizeof(iatCalibration_values))
+#define EEPROM_CALIBRATION_IAT_BINS   (EEPROM_CALIBRATION_IAT_VALUES-sizeof(iatCalibration_bins))
+#define EEPROM_CALIBRATION_O2_VALUES  (EEPROM_CALIBRATION_IAT_BINS-sizeof(o2Calibration_values))
+#define EEPROM_CALIBRATION_O2_BINS    (EEPROM_CALIBRATION_O2_VALUES-sizeof(o2Calibration_bins))
+#define EEPROM_LAST_BARO              (EEPROM_CALIBRATION_O2_BINS-1)
+
+
+
+
 
 #define EEPROM_CONFIG1_MAP    3
 #define EEPROM_CONFIG2_START  291
@@ -197,5 +198,183 @@ extern uint32_t deferEEPROMWritesUntil;
 #define EEPROM_CALIBRATION_CLT_OLD  3583
 
 #define EEPROM_DEFER_DELAY          MICROS_PER_SEC //1.0 second pause after large comms before writing to EEPROM
+
+
+
+ //  ================================= Internal write support ===============================
+ struct write_location {
+   eeprom_address_t address; // EEPROM address to write next
+   uint16_t counter; // Number of bytes written
+   uint8_t write_block_size; // Maximum number of bytes to write
+
+   /** Update byte to EEPROM by first comparing content and the need to write it.
+   We only ever write to the EEPROM where the new value is different from the currently stored byte
+   This is due to the limited write life of the EEPROM (Approximately 100,000 writes)
+   */
+   void update(uint8_t value)
+   {
+     if (EEPROM.read(address)!=value)
+     {
+       EEPROM.write(address, value);
+       ++counter;
+     }
+   }
+
+   /** Create a copy with a different write address.
+    * Allows chaining of instances.
+    */
+   write_location changeWriteAddress(eeprom_address_t newAddress) const {
+     return { newAddress, counter, write_block_size };
+   }
+
+   write_location& operator++()
+   {
+     ++address;
+     return *this;
+   }
+
+   bool can_write() const
+   {
+     bool canWrite = false;
+     if(currentStatus.RPM > 0) { canWrite = (counter <= write_block_size); }
+     else { canWrite = (counter <= (write_block_size * 8)); } //Write to EEPROM more aggressively if the engine is not running
+
+     return canWrite;
+   }
+ };
+
+ static inline write_location write_range(const byte *pStart, const byte *pEnd, write_location location)
+ {
+   while ( location.can_write() && pStart!=pEnd)
+   {
+     location.update(*pStart);
+     ++pStart;
+     ++location;
+   }
+   return location;
+ }
+
+ static inline write_location write(const table_row_iterator &row, write_location location)
+ {
+   return write_range(&*row, row.end(), location);
+ }
+
+ static inline write_location write(table_value_iterator it, write_location location)
+ {
+   while (location.can_write() && !it.at_end())
+   {
+     location = write(*it, location);
+     ++it;
+   }
+   return location;
+ }
+
+ static inline write_location write(table_axis_iterator it, write_location location)
+ {
+   const table3d_axis_io_converter converter = get_table3d_axis_converter(it.get_domain());
+   while (location.can_write() && !it.at_end())
+   {
+     location.update(converter.to_byte(*it));
+     ++location;
+     ++it;
+   }
+   return location;
+ }
+
+
+ static inline write_location writeTable(void *pTable, table_type_t key, write_location location)
+ {
+   return write(y_rbegin(pTable, key),
+                 write(x_begin(pTable, key),
+                   write(rows_begin(pTable, key), location)));
+ }
+
+ //Simply an alias for EEPROM.update()
+  void EEPROMWriteRaw(uint16_t address, uint8_t data);
+  uint8_t EEPROMReadRaw(uint16_t address);
+
+ //  ================================= End write support ===============================
+
+
+ //  ================================= Internal read support ===============================
+
+ /** Load range of bytes form EEPROM offset to memory.
+  * @param address - start offset in EEPROM
+  * @param pFirst - Start memory address
+  * @param pLast - End memory address
+  */
+ static inline eeprom_address_t load_range(eeprom_address_t address, byte *pFirst, const byte *pLast)
+ {
+ #if defined(CORE_AVR)
+   // The generic code in the #else branch works but this provides a 45% speed up on AVR
+   size_t size = pLast-pFirst;
+   eeprom_read_block(pFirst, (const void*)(size_t)address, size);
+   return address+size;
+ #else
+   for (; pFirst != pLast; ++address, (void)++pFirst)
+   {
+     *pFirst = EEPROM.read(address);
+   }
+   return address;
+ #endif
+ }
+
+ static inline eeprom_address_t load(table_row_iterator row, eeprom_address_t address)
+ {
+   return load_range(address, &*row, row.end());
+ }
+
+ static inline eeprom_address_t load(table_value_iterator it, eeprom_address_t address)
+ {
+   while (!it.at_end())
+   {
+     address = load(*it, address);
+     ++it;
+   }
+   return address;
+ }
+
+ static inline eeprom_address_t load(table_axis_iterator it, eeprom_address_t address)
+ {
+     const table3d_axis_io_converter converter = get_table3d_axis_converter(it.get_domain());
+   while (!it.at_end())
+   {
+     *it = converter.from_byte(EEPROM.read(address));
+     ++address;
+     ++it;
+   }
+   return address;
+ }
+
+
+ static inline eeprom_address_t loadTable(void *pTable, table_type_t key, eeprom_address_t address)
+ {
+   return load(y_rbegin(pTable, key),
+                 load(x_begin(pTable, key),
+                   load(rows_begin(pTable, key), address)));
+ }
+
+ //  ================================= End internal read support ===============================
+
+
+
+
+void storageControl(void);
+
+void EEPROMWriteRaw(uint16_t address, uint8_t data);
+uint8_t EEPROMReadRaw(uint16_t address);
+
+
+
+
+
+ void storePageCRC32(uint8_t pageNum, uint32_t crcValue);
+ uint32_t readPageCRC32(uint8_t pageNum);
+ void storeCalibrationCRC32(uint8_t calibrationPageNum, uint32_t calibrationCRC);
+ uint32_t readCalibrationCRC32(uint8_t calibrationPageNum);
+ uint16_t getEEPROMSize(void);
+ bool isEepromWritePending(void);
+
+
 
 #endif // STORAGE_H

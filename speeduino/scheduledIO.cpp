@@ -1,6 +1,8 @@
+
 #include "scheduledIO.h"
 #include "scheduler.h"
 #include "globals.h"
+#include "config.h"
 #include "timers.h"
 #include "acc_mc33810.h"
 /** @file

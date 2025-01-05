@@ -4,6 +4,8 @@ Copyright (C) Josh Stewart
 A full copy of the license may be found in the projects root directory
 */
 #include "idle.h"
+#include "speeduino.h"
+#include "config.h"
 #include "maths.h"
 #include "timers.h"
 #include "src/PID_v1/PID_v1.h"
@@ -482,7 +484,11 @@ void idleControl(void)
           currentStatus.idleLoad = map(idleTaper, 0, configPage2.idleTaperTime,\
           table2D_getValue(&iacCrankDutyTable, currentStatus.coolant + CALIBRATION_TEMPERATURE_OFFSET),\
           table2D_getValue(&iacPWMTable, currentStatus.coolant + CALIBRATION_TEMPERATURE_OFFSET));
-          if( BIT_CHECK(LOOP_TIMER, BIT_TIMER_10HZ) ) { idleTaper++; }
+
+          if( BIT_CHECK(loopTimerMask, BIT_TIMER_10HZ) )
+          {
+        	  idleTaper++;
+          }
         }
         else
         {
@@ -522,7 +528,11 @@ void idleControl(void)
       else
       {
         idle_cl_target_rpm = (uint16_t)currentStatus.CLIdleTarget * 10; //Multiply the byte target value back out by 10
-        if( BIT_CHECK(LOOP_TIMER, BIT_TIMER_1HZ) ) { idlePID.SetTunings(configPage6.idleKP, configPage6.idleKI, configPage6.idleKD); } //Re-read the PID settings once per second
+
+        if( BIT_CHECK(loopTimerMask, BIT_TIMER_1HZ) )
+        {
+        	idlePID.SetTunings(configPage6.idleKP, configPage6.idleKI, configPage6.idleKD);
+        } //Re-read the PID settings once per second
         
         PID_computed = idlePID.Compute(true);
         long TEMP_idle_pwm_target_value;
@@ -603,7 +613,7 @@ void idleControl(void)
         
     
         idle_cl_target_rpm = (uint16_t)currentStatus.CLIdleTarget * 10; //Multiply the byte target value back out by 10
-        if( BIT_CHECK(LOOP_TIMER, BIT_TIMER_1HZ) ) { idlePID.SetTunings(configPage6.idleKP, configPage6.idleKI, configPage6.idleKD); } //Re-read the PID settings once per second
+        if( BIT_CHECK(loopTimerMask, BIT_TIMER_1HZ) ) { idlePID.SetTunings(configPage6.idleKP, configPage6.idleKI, configPage6.idleKD); } //Re-read the PID settings once per second
         if((currentStatus.RPM - idle_cl_target_rpm > configPage2.iacRPMlimitHysteresis*10) || (currentStatus.TPS > configPage2.iacTPSlimit)){ //reset integral to zero when TPS is bigger than set value in TS (opening throttle so not idle anymore). OR when RPM higher than Idle Target + RPM Histeresis (coming back from high rpm with throttle closed)
           idlePID.ResetIntegeral();
         }
@@ -636,7 +646,7 @@ void idleControl(void)
         else
         {
           //Standard running
-          if (BIT_CHECK(LOOP_TIMER, BIT_TIMER_10HZ) && (currentStatus.RPM > 0))
+          if (BIT_CHECK(loopTimerMask, BIT_TIMER_10HZ) && (currentStatus.RPM > 0))
           {
             if ( idleTaper < configPage2.idleTaperTime )
             {
@@ -644,7 +654,7 @@ void idleControl(void)
               idleStepper.targetIdleStep = map(idleTaper, 0, configPage2.idleTaperTime,\
               table2D_getValue(&iacCrankStepsTable, (currentStatus.coolant + CALIBRATION_TEMPERATURE_OFFSET)) * 3,\
               table2D_getValue(&iacStepTable, (currentStatus.coolant + CALIBRATION_TEMPERATURE_OFFSET)) * 3);
-              if( BIT_CHECK(LOOP_TIMER, BIT_TIMER_10HZ) ) { idleTaper++; }
+              if( BIT_CHECK(loopTimerMask, BIT_TIMER_10HZ) ) { idleTaper++; }
             }
             else
             {
@@ -695,7 +705,7 @@ void idleControl(void)
         }
         else 
         {
-          if( BIT_CHECK(LOOP_TIMER, BIT_TIMER_10HZ) )
+          if( BIT_CHECK(loopTimerMask, BIT_TIMER_10HZ) )
           {
             idle_cl_target_rpm = (uint16_t)currentStatus.CLIdleTarget * 10; //Multiply the byte target value back out by 10
             if( idleTaper < configPage2.idleTaperTime )
@@ -748,7 +758,8 @@ void idleControl(void)
         else { currentStatus.idleLoad = idleStepper.curIdleStep; }
         doStep();
       }
-      if (BIT_CHECK(LOOP_TIMER, BIT_TIMER_1HZ)) //Use timer flag instead idle count
+
+      if (BIT_CHECK(loopTimerMask, BIT_TIMER_1HZ)) //Use timer flag instead idle count
       {
         //This only needs to be run very infrequently, once per second
         idlePID.SetTunings(configPage6.idleKP, configPage6.idleKI, configPage6.idleKD);

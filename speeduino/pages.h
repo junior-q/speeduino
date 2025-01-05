@@ -1,6 +1,9 @@
-#pragma once
+
+#ifndef PAGES_H
+#define PAGES_H
+
 #include <Arduino.h>
-#include "table3d.h"
+#include "tables/table3d.h"
 
 /**
  * Page count, as defined in the INI file
@@ -99,3 +102,5 @@ table_axis_iterator x_rbegin(const page_iterator_t &it);
  * Convert page iterator to table y axis iterator.
  */
 table_axis_iterator y_begin(const page_iterator_t &it);
+
+#endif // PAGES_H

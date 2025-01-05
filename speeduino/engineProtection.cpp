@@ -1,5 +1,7 @@
 
 #include "globals.h"
+
+#include "config.h"
 #include "engineProtection.h"
 #include "maths.h"
 

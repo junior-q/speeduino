@@ -7,6 +7,7 @@ A full copy of the license may be found in the projects root directory
  * Process Incoming and outgoing serial communications.
  */
 #include "globals.h"
+#include "config.h"
 #include "comms.h"
 #include "comms_legacy.h"
 #include "comms_secondary.h"
@@ -18,7 +19,7 @@ A full copy of the license may be found in the projects root directory
 #include "pages.h"
 #include "page_crc.h"
 #include "logger.h"
-#include "table3d_axis_io.h"
+#include "tables/table3d_axis_io.h"
 #include BOARD_H
 #ifdef RTC_ENABLED
   #include "rtc_common.h"

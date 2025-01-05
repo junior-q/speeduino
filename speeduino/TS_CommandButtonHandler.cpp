@@ -5,6 +5,7 @@
  */
 
 #include "globals.h"
+#include "config.h"
 #include "TS_CommandButtonHandler.h"
 #include "utilities.h"
 #include "scheduledIO.h"

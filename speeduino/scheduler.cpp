@@ -25,6 +25,7 @@ A full copy of the license may be found in the projects root directory
  * - ign*EndFunction() - Execute **end** of ignition (Interrupt handler)
  */
 #include "globals.h"
+#include "config.h"
 #include "scheduler.h"
 #include "scheduledIO.h"
 #include "timers.h"

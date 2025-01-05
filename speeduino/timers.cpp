@@ -12,6 +12,8 @@ Timers are typically low resolution (Compared to Schedulers), with maximum frequ
 */
 #include "timers.h"
 #include "globals.h"
+#include "config.h"
+
 #include "sensors.h"
 #include "scheduler.h"
 #include "scheduledIO.h"

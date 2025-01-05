@@ -9,12 +9,14 @@
  * The doUpdates() uses may lower level routines from Arduino EEPROM library and storage.ino to carry out EEPROM storage tasks.
  */
 #include "globals.h"
+#include "config.h"
+
 #include "storage.h"
 #include "sensors.h"
 #include "updates.h"
 #include "pages.h"
 #include "comms_CAN.h"
-#include EEPROM_LIB_H //This is defined in the board .h files
+
 
 void doUpdates(void)
 {

@@ -16,6 +16,7 @@ sendcancommand is called when a command is to be sent either to serial3
 ,to the external Can interface, or to the onboard/attached can interface
 */
 #include "globals.h"
+#include "config.h"
 #include "comms.h"
 #include "comms_secondary.h"
 #include "comms_CAN.h"

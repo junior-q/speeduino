@@ -9,6 +9,7 @@ A full copy of the license may be found in the projects root directory
 #include "globals.h"
 #include "comms.h"
 #include "comms_secondary.h"
+#include "config.h"
 #include "storage.h"
 #include "maths.h"
 #include "utilities.h"

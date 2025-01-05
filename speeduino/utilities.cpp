@@ -9,6 +9,8 @@
  */
 #include <avr/pgmspace.h>
 #include "globals.h"
+#include "config.h"
+
 #include "utilities.h"
 #include "decoders.h"
 #include "comms.h"

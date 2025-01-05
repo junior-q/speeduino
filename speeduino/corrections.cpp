@@ -24,8 +24,12 @@ There are 2 top level functions that call more detailed corrections for Fuel and
 //************************************************************************************************************
 
 #include "globals.h"
-#include "corrections.h"
+#include "config.h"
 #include "speeduino.h"
+
+#include "corrections.h"
+
+#include "engine.h"
 #include "timers.h"
 #include "maths.h"
 #include "sensors.h"
@@ -190,7 +194,7 @@ uint16_t correctionCranking(void)
     unsigned long taperStart = (unsigned long) crankingValue * 100 / currentStatus.ASEValue;
     crankingValue = (uint16_t) map(crankingEnrichTaper, 0, configPage10.crankingEnrichTaper, taperStart, 100); //Taper from start value to 100%
     if (crankingValue < 100) { crankingValue = 100; } //Sanity check
-    if( BIT_CHECK(LOOP_TIMER, BIT_TIMER_10HZ) ) { crankingEnrichTaper++; }
+    if( BIT_CHECK(loopTimerMask, BIT_TIMER_10HZ) ) { crankingEnrichTaper++; }
   }
   return crankingValue;
 }
@@ -209,7 +213,7 @@ byte correctionASE(void)
   //2) Make sure we're not still cranking
   if( BIT_CHECK(currentStatus.engine, BIT_ENGINE_CRANK) != true )
   {
-    if ( BIT_CHECK(LOOP_TIMER, BIT_TIMER_10HZ) || (currentStatus.ASEValue == 0) )
+    if ( BIT_CHECK(loopTimerMask, BIT_TIMER_10HZ) || (currentStatus.ASEValue == 0) )
     {
       if ( (currentStatus.runSecs < (table2D_getValue(&ASECountTable, currentStatus.coolant + CALIBRATION_TEMPERATURE_OFFSET))) && !(BIT_CHECK(currentStatus.engine, BIT_ENGINE_CRANK)) )
       {
@@ -528,7 +532,7 @@ byte correctionDFCOfuel(void)
       //Do a check if the user reduced the duration while active to avoid overflow
       if (dfcoTaper > configPage9.dfcoTaperTime) { dfcoTaper = configPage9.dfcoTaperTime; }
       scaleValue = map(dfcoTaper, configPage9.dfcoTaperTime, 0, 100, configPage9.dfcoTaperFuel);
-      if( BIT_CHECK(LOOP_TIMER, BIT_TIMER_10HZ) ) { dfcoTaper--; }
+      if( BIT_CHECK(loopTimerMask, BIT_TIMER_10HZ) ) { dfcoTaper--; }
     }
     else { scaleValue = 0; } //Taper ended or disabled, disable fuel
   }
@@ -556,7 +560,7 @@ bool correctionDFCO(void)
       {
         if( dfcoDelay < configPage2.dfcoDelay )
         {
-          if( BIT_CHECK(LOOP_TIMER, BIT_TIMER_10HZ) ) { dfcoDelay++; }
+          if( BIT_CHECK(loopTimerMask, BIT_TIMER_10HZ) ) { dfcoDelay++; }
         }
         else { DFCOValue = true; }
       }
@@ -803,7 +807,10 @@ int8_t correctionIdleAdvance(int8_t advance)
     {
       if( idleAdvTaper < configPage9.idleAdvStartDelay )
       {
-        if( BIT_CHECK(LOOP_TIMER, BIT_TIMER_10HZ) ) { idleAdvTaper++; }
+        if( BIT_CHECK(loopTimerMask, BIT_TIMER_10HZ) )
+        {
+        	idleAdvTaper++;
+        }
       }
       else
       {
@@ -846,10 +853,19 @@ int8_t correctionSoftRevLimit(int8_t advance)
         if (configPage2.SoftLimitMode == SOFT_LIMIT_RELATIVE) { ignSoftRevValue = ignSoftRevValue - configPage4.SoftLimRetard; } //delay timing by configured number of degrees in relative mode
         else if (configPage2.SoftLimitMode == SOFT_LIMIT_FIXED) { ignSoftRevValue = configPage4.SoftLimRetard; } //delay timing to configured number of degrees in fixed mode
 
-        if( BIT_CHECK(LOOP_TIMER, BIT_TIMER_10HZ) ) { softLimitTime++; }
+        if( BIT_CHECK(loopTimerMask, BIT_TIMER_10HZ) )
+        {
+        	softLimitTime++;
+        }
       }
     }
-    else if( BIT_CHECK(LOOP_TIMER, BIT_TIMER_10HZ) ) { softLimitTime = 0; } //Only reset time at runSecsX10 update rate
+    else
+    {
+    	if( BIT_CHECK(loopTimerMask, BIT_TIMER_10HZ) )
+    	{
+    		softLimitTime = 0;
+    	} //Only reset time at runSecsX10 update rate
+    }
   }
 
   return ignSoftRevValue;
@@ -1018,7 +1034,7 @@ int8_t correctionKnockTiming(int8_t advance)
     else
     {
       //If not is not currently active, we read the analog pin every 30Hz
-      if( BIT_CHECK(LOOP_TIMER, BIT_TIMER_30HZ) ) 
+      if( BIT_CHECK(loopTimerMask, BIT_TIMER_30HZ) )
       { 
         uint16_t tmpKnockReading = getAnalogKnock();
 
