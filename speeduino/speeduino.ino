@@ -32,6 +32,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "comms.h"
 #include "comms_legacy.h"
 #include "comms_secondary.h"
+#include "pages.h"
+
+#include "TSComms.h"
+
 #include "maths.h"
 #include "corrections.h"
 #include "timers.h"
@@ -63,11 +67,19 @@ static void wmiLamp(void);		// No water indicator bulb
 byte loopTimerMask;			// current loop tick timer mask
 uint32_t currentLoopTime; /**< The time (in uS) that the current mainloop started */
 
+const byte pinLedDemo = 38;
+
 
 //#ifndef UNIT_TEST // Scope guard for unit testing
 void setup(void)
 {
-  currentStatus.initialisationComplete = false; //Tracks whether the initialiseAll() function has run completely
+	Spi.begin();				// SPI0 -> connect to a flash mem
+	Spi1.begin();				// SPI1 -> connect to L9779
+	Spi2.begin();				// SPI2 -> connect to Baro & FRAM
+
+	pinMode(pinLedDemo, OUTPUT);
+
+	currentStatus.initialisationComplete = false; //Tracks whether the initialiseAll() function has run completely
   initialiseAll();
 }
 
@@ -99,9 +111,27 @@ void setup(void)
 // it to inline, so we need to suppress the resulting warning.
 //void __attribute__((always_inline)) loop(void)
 
+long count;
+
+
 void loop(void)
 {
 	if(mainLoopCount < UINT16_MAX) { mainLoopCount++; }
+
+    count++;
+
+    if( count >= 10000 )
+    {
+  	    count = 0;
+
+  	    digitalWrite(pinLedDemo, !digitalRead(pinLedDemo));
+
+        SYS_UnlockReg();
+        WDT_RESET_COUNTER();
+        SYS_LockReg();
+    }
+
+
 
 	ATOMIC(){
 		loopTimerMask = TIMER_mask;		// make a running copy of timer tick mask
@@ -113,7 +143,7 @@ void loop(void)
     //SERIAL Comms
 	serialControl();
 
-	storageControl();
+	Storage.storageControl();			// control machine for mem storage
 
     if( (configPage6.iacAlgorithm == IAC_ALGORITHM_STEP_OL)
     || (configPage6.iacAlgorithm == IAC_ALGORITHM_STEP_CL)
@@ -138,12 +168,13 @@ void loop(void)
       #endif
     }
 
-    if(BIT_CHECK(loopTimerMask, BIT_TIMER_50HZ)) //50 hertz
+    if(	BIT_CHECK(loopTimerMask, BIT_TIMER_50HZ) ) //50 hertz
     {
       #if defined(NATIVE_CAN_AVAILABLE)
       sendCANBroadcast(50);
       #endif
 
+      digitalUpdateL9979WD();
     }
 
     if(BIT_CHECK(loopTimerMask, BIT_TIMER_30HZ)) //30 hertz
@@ -173,11 +204,12 @@ void loop(void)
       #endif
 
       #ifdef SD_LOGGING
-        if(configPage13.onboard_log_file_rate == LOGGER_RATE_30HZ) { writeSDLogEntry(); }
+        if(configPage13.onboard_log_file_rate == LOGGER_RATE_30HZ)
+        {
+        	writeSDLogEntry();
+        }
       #endif
 
-      //Check for any outstanding EEPROM writes.
-      if( (isEepromWritePending() == true) && (serialStatusFlag == SERIAL_INACTIVE) && (micros() > deferEEPROMWritesUntil)) { writeAllConfig(); } 
     }
 
     if (BIT_CHECK(loopTimerMask, BIT_TIMER_15HZ)) //Every 32 loops
@@ -185,7 +217,8 @@ void loop(void)
       #if TPS_READ_FREQUENCY == 15
         readTPS(); //TPS reading to be performed every 32 loops (any faster and it can upset the TPSdot sampling time)
       #endif
-      #if  defined(CORE_TEENSY35)       
+
+      #if  defined(CORE_TEENSY35)
           if (configPage9.enable_intcan == 1) // use internal can module
           {
            // this is just to test the interface is sending
@@ -200,7 +233,10 @@ void loop(void)
       #endif
 
       //And check whether the tooth log buffer is ready
-      if(toothHistoryIndex > TOOTH_LOG_SIZE) { BIT_SET(currentStatus.status1, BIT_STATUS1_TOOTHLOG1READY); }
+      if( toothHistoryIndex > TOOTH_LOG_SIZE )
+      {
+    	  BIT_SET(currentStatus.status1, BIT_STATUS1_TOOTHLOG1READY);
+      }
     }
 
     if(BIT_CHECK(loopTimerMask, BIT_TIMER_10HZ)) //10 hertz
@@ -222,6 +258,7 @@ void loop(void)
       #ifdef SD_LOGGING
         if(configPage13.onboard_log_file_rate == LOGGER_RATE_10HZ) { writeSDLogEntry(); }
       #endif
+
     }
 
     if (BIT_CHECK(loopTimerMask, BIT_TIMER_4HZ))
@@ -230,7 +267,9 @@ void loop(void)
       readCLT();
       readIAT();
       readBat();
+
       nitrousControl();
+
       updateIdleTarget();
 
       #ifdef SD_LOGGING
@@ -264,6 +303,8 @@ void loop(void)
 
     engineControl();
 
+#if !defined(CORE_M451)
+
     if ( (!BIT_CHECK(currentStatus.status3, BIT_STATUS3_RESET_PREVENT)) && (resetControl == RESET_CONTROL_PREVENT_WHEN_RUNNING) )
     {
         //Reset prevention is supposed to be on while the engine is running but isn't. Fix that.
@@ -278,6 +319,7 @@ void loop(void)
     		BIT_CLEAR(currentStatus.status3, BIT_STATUS3_RESET_PREVENT);
     	}
     }
+#endif
 
 } //loop()
 //#pragma GCC diagnostic pop
@@ -287,6 +329,15 @@ void loop(void)
 
 static void serialControl(void)
 {
+
+#if defined(CORE_M451)
+
+	tsComm.serialTransmit();
+
+	tsComm.serialReceive();
+
+#else
+
   //SERIAL Comms
   //Initially check that the last serial send values request is not still outstanding
   if (serialTransmitInProgress())
@@ -324,6 +375,7 @@ static void serialControl(void)
 	  }
 	}
   #endif
+#endif
 }
 
 
@@ -343,11 +395,13 @@ static void auxControl(void)
 		{ //if current input channel is enabled as external & secondary serial enabled & internal can disabled(but internal can is available)
 		  // or current input channel is enabled as external & secondary serial enabled & internal can enabled(and internal can is available)
 		  //currentStatus.canin[13] = 11;  Dev test use only!
+#ifdef SECONDARY_SERIAL_T	// only if used
 		  if (configPage9.enable_secondarySerial == 1)  // megas only support can via secondary serial
 		  {
 			sendCancommand(2,0,currentStatus.current_caninchannel,0,((configPage9.caninput_source_can_address[currentStatus.current_caninchannel]&2047)+0x100));
 			//send an R command for data from caninput_source_address[currentStatus.current_caninchannel] from secondarySerial
 		  }
+#endif
 		}
 		else
 		{
@@ -492,10 +546,15 @@ bool pinIsOutput(byte pin)
   || ((pin == pinInjector2) && (configPage2.nInjectors > 1))
   || ((pin == pinInjector3) && (configPage2.nInjectors > 2))
   || ((pin == pinInjector4) && (configPage2.nInjectors > 3))
+#if (INJ_CHANNELS >= 5)
   || ((pin == pinInjector5) && (configPage2.nInjectors > 4))
   || ((pin == pinInjector6) && (configPage2.nInjectors > 5))
   || ((pin == pinInjector7) && (configPage2.nInjectors > 6))
   || ((pin == pinInjector8) && (configPage2.nInjectors > 7)))
+#else
+  )
+#endif
+
   {
     used = true;
   }
@@ -504,6 +563,7 @@ bool pinIsOutput(byte pin)
   || ((pin == pinCoil2) && (maxIgnOutputs > 1))
   || ((pin == pinCoil3) && (maxIgnOutputs > 2))
   || ((pin == pinCoil4) && (maxIgnOutputs > 3))
+#if (INJ_CHANNELS >= 5)
   || ((pin == pinCoil5) && (maxIgnOutputs > 4))
   || ((pin == pinCoil6) && (maxIgnOutputs > 5))
   || ((pin == pinCoil7) && (maxIgnOutputs > 6))
@@ -511,7 +571,11 @@ bool pinIsOutput(byte pin)
   {
     used = true;
   }
-  //Functions?
+#else
+  )
+#endif
+
+	//Functions?
   if ((pin == pinFuelPump)
   || ((pin == pinFan) && (configPage2.fanEnable == 1))
   || ((pin == pinVVT_1) && (configPage6.vvtEnabled > 0))
@@ -524,8 +588,13 @@ bool pinIsOutput(byte pin)
   || ((pin == pinStepperStep) && isIdleSteper)
   || ((pin == pinStepperDir) && isIdleSteper)
   || (pin == pinTachOut)
+#if !defined(CORE_M451)
+
   || ((pin == pinAirConComp) && (configPage15.airConEnable > 0))
   || ((pin == pinAirConFan) && (configPage15.airConEnable > 0) && (configPage15.airConFanEnabled > 0)) )
+#else
+	  )
+#endif
   {
     used = true;
   }
