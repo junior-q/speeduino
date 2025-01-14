@@ -211,14 +211,21 @@ extern uint32_t deferEEPROMWritesUntil;
    We only ever write to the EEPROM where the new value is different from the currently stored byte
    This is due to the limited write life of the EEPROM (Approximately 100,000 writes)
    */
+#if defined(USE_FRAM_FOR_STORAGE)
+
+#endif
+
+#if defined(USE_EEPROM_FOR_STORAGE)
    void update(uint8_t value)
    {
+
      if (EEPROM.read(address)!=value)
      {
        EEPROM.write(address, value);
        ++counter;
      }
    }
+#endif
 
    /** Create a copy with a different write address.
     * Allows chaining of instances.
@@ -243,138 +250,49 @@ extern uint32_t deferEEPROMWritesUntil;
    }
  };
 
- static inline write_location write_range(const byte *pStart, const byte *pEnd, write_location location)
+
+
+ ////////////////////////////////////////////////////////////////////////////////
+ class StorageClass
  {
-   while ( location.can_write() && pStart!=pEnd)
-   {
-     location.update(*pStart);
-     ++pStart;
-     ++location;
-   }
-   return location;
- }
+   public:
+	 StorageClass();
 
- static inline write_location write(const table_row_iterator &row, write_location location)
- {
-   return write_range(&*row, row.end(), location);
- }
+	 void storageControl(void);
 
- static inline write_location write(table_value_iterator it, write_location location)
- {
-   while (location.can_write() && !it.at_end())
-   {
-     location = write(*it, location);
-     ++it;
-   }
-   return location;
- }
+	 //Simply an alias for EEPROM.update()
+	 void EEPROMWriteRaw(uint16_t address, uint8_t data);
+	 uint8_t EEPROMReadRaw(uint16_t address);
 
- static inline write_location write(table_axis_iterator it, write_location location)
- {
-   const table3d_axis_io_converter converter = get_table3d_axis_converter(it.get_domain());
-   while (location.can_write() && !it.at_end())
-   {
-     location.update(converter.to_byte(*it));
-     ++location;
-     ++it;
-   }
-   return location;
- }
+	 void storePageCRC32(uint8_t pageNum, uint32_t crcValue);
+	 uint32_t readPageCRC32(uint8_t pageNum);
 
+	 void storeCalibrationCRC32(uint8_t calibrationPageNum, uint32_t calibrationCRC);
+	 uint32_t readCalibrationCRC32(uint8_t calibrationPageNum);
 
- static inline write_location writeTable(void *pTable, table_type_t key, write_location location)
- {
-   return write(y_rbegin(pTable, key),
-                 write(x_begin(pTable, key),
-                   write(rows_begin(pTable, key), location)));
- }
+	 uint16_t getEEPROMSize(void);
+	 bool isEepromWritePending(void);
 
- //Simply an alias for EEPROM.update()
-  void EEPROMWriteRaw(uint16_t address, uint8_t data);
-  uint8_t EEPROMReadRaw(uint16_t address);
+	 eeprom_address_t loadTable(void *pTable, table_type_t key, eeprom_address_t address);
+	 write_location writeTable(void *pTable, table_type_t key, write_location location);
+     eeprom_address_t load_range(eeprom_address_t address, byte *pFirst, const byte *pLast);
+	 write_location write_range(const byte *pStart, const byte *pEnd, write_location location);
 
- //  ================================= End write support ===============================
+	 eeprom_address_t load_block(eeprom_address_t address, void *__p_block, uint16_t _blk_size);
+	 eeprom_address_t write_block(eeprom_address_t address, const void *__p_block, uint16_t _blk_size);
 
+   protected:
+	 eeprom_address_t compute_crc_address(uint8_t pageNum);
 
- //  ================================= Internal read support ===============================
+	 eeprom_address_t load(table_row_iterator row, eeprom_address_t address);
+	 eeprom_address_t load(table_value_iterator it, eeprom_address_t address);
+	 eeprom_address_t load(table_axis_iterator it, eeprom_address_t address);
 
- /** Load range of bytes form EEPROM offset to memory.
-  * @param address - start offset in EEPROM
-  * @param pFirst - Start memory address
-  * @param pLast - End memory address
-  */
- static inline eeprom_address_t load_range(eeprom_address_t address, byte *pFirst, const byte *pLast)
- {
- #if defined(CORE_AVR)
-   // The generic code in the #else branch works but this provides a 45% speed up on AVR
-   size_t size = pLast-pFirst;
-   eeprom_read_block(pFirst, (const void*)(size_t)address, size);
-   return address+size;
- #else
-   for (; pFirst != pLast; ++address, (void)++pFirst)
-   {
-     *pFirst = EEPROM.read(address);
-   }
-   return address;
- #endif
- }
+	 write_location write(const table_row_iterator &row, write_location location);
+	 write_location write(table_value_iterator it, write_location location);
+	 write_location write(table_axis_iterator it, write_location location);
+ };
 
- static inline eeprom_address_t load(table_row_iterator row, eeprom_address_t address)
- {
-   return load_range(address, &*row, row.end());
- }
-
- static inline eeprom_address_t load(table_value_iterator it, eeprom_address_t address)
- {
-   while (!it.at_end())
-   {
-     address = load(*it, address);
-     ++it;
-   }
-   return address;
- }
-
- static inline eeprom_address_t load(table_axis_iterator it, eeprom_address_t address)
- {
-     const table3d_axis_io_converter converter = get_table3d_axis_converter(it.get_domain());
-   while (!it.at_end())
-   {
-     *it = converter.from_byte(EEPROM.read(address));
-     ++address;
-     ++it;
-   }
-   return address;
- }
-
-
- static inline eeprom_address_t loadTable(void *pTable, table_type_t key, eeprom_address_t address)
- {
-   return load(y_rbegin(pTable, key),
-                 load(x_begin(pTable, key),
-                   load(rows_begin(pTable, key), address)));
- }
-
- //  ================================= End internal read support ===============================
-
-
-
-
-void storageControl(void);
-
-void EEPROMWriteRaw(uint16_t address, uint8_t data);
-uint8_t EEPROMReadRaw(uint16_t address);
-
-
-
-
-
- void storePageCRC32(uint8_t pageNum, uint32_t crcValue);
- uint32_t readPageCRC32(uint8_t pageNum);
- void storeCalibrationCRC32(uint8_t calibrationPageNum, uint32_t calibrationCRC);
- uint32_t readCalibrationCRC32(uint8_t calibrationPageNum);
- uint16_t getEEPROMSize(void);
- bool isEepromWritePending(void);
-
-
+ extern StorageClass Storage;
 
 #endif // STORAGE_H
